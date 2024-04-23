@@ -1,0 +1,313 @@
+<html>
+
+<head>
+  <title>Low Poly Castle</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Monospace;
+      background-color: #000;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    #controlPanel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+    }
+
+    .slider {
+      margin-left: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Controls for sliders -->
+  <div id="controlPanel">
+    <label for="lightControl">Sun Position:</label>
+    <input id="lightControl" type="range" min="0" max="360" value="0" step="1" class="slider">
+    <label for="treeDensityControl">Tree Density:</label>
+    <input id="treeDensityControl" type="range" min="1" max="10" value="1" step="1" class="slider">
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from './build/controls/OrbitControls.js';
+    import { FBXLoader } from './build/loaders/FBXLoader.js';
+
+    // Setup scene
+    var scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0xeda987, 1, 10000); // this looks great!
+    var ratio = window.innerWidth / window.innerHeight;
+
+    // Setup camera
+    var camera = new THREE.PerspectiveCamera(45, ratio, 0.1, 15000);
+    camera.position.set(100, 500, 2500);
+    camera.lookAt(0, 0, 1);
+    scene.add(camera);
+
+    // Setup renderer
+    var renderer = new THREE.WebGLRenderer({ logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    //renderer.setClearColor(0x87CEEB);
+    document.body.appendChild(renderer.domElement);
+
+    // Setup controls
+    var controls = new OrbitControls(camera, renderer.domElement);
+
+    // Add sky gradient
+    addSkyGradient();
+
+    // Update scene
+    function updateScene() {
+      renderer.render(scene, camera);
+      controls.update();
+      requestAnimationFrame(updateScene);
+    }
+    requestAnimationFrame(updateScene);
+
+    // Resize handling
+    window.addEventListener('resize', function () {
+      var width = window.innerWidth;
+      var height = window.innerHeight;
+      renderer.setSize(width, height);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+    });
+
+    // Texture loader
+    var textureLoader = new THREE.TextureLoader();
+    // Trees
+    var treeTexture = textureLoader.load('/models/Trees/tree_palette.png');
+    var treeMaterial = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      emissive: 0x000000
+    });
+    var treeModels = [];
+    // Castle
+    var castleTexture = textureLoader.load('/models/palette_color.png');
+    var matteMaterial = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      emissive: 0x000000
+    });
+    // Campfire
+    var campfireTexture = textureLoader.load('/models/CampFireTex.png');
+    var campfireMaterial = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      emissive: 0xaa5a00,
+      opacity: 0.9,
+      transparent: true,
+    });
+
+
+    // Load tree models
+    for (let i = 1; i <= 5; i++) {
+      let loader = new FBXLoader();
+      loader.load(`/models/Trees/Tree${i}.fbx`, function (object) {
+        object.traverse(function (child) {
+          if (child.isMesh) {
+            child.material = treeMaterial;
+            child.material.map = treeTexture;
+            child.material.needsUpdate = true;
+            child.receiveShadow = true;
+            child.castShadow = true;
+          }
+        });
+        treeModels.push(object);
+      });
+    }
+
+    // Load castle model
+    var castle;
+    var fbxLoader = new FBXLoader();
+    fbxLoader.load('/models/CutoutCastleRuins.fbx', function (object) {
+      castle = object;
+      castle.traverse(function (child) {
+        if (child.isMesh) {
+          child.material = matteMaterial;
+          child.material.map = castleTexture;
+          child.material.needsUpdate = true;
+          child.receiveShadow = true;
+          child.castShadow = true;
+        }
+      });
+      scene.add(castle);
+      castle.position.set(0, 0, 0); // castle position
+      updateTrees();
+    });
+
+    // Load Campfire model
+    var campfire;
+    var campfireLoader = new FBXLoader();
+    campfireLoader.load('/models/campfire.fbx', function (object) {
+      campfire = object;
+      campfire.traverse(function (child) {
+        if (child.isMesh) {
+          child.material = campfireMaterial;
+          child.material.map = campfireTexture;
+          child.material.needsUpdate = true;
+          //child.receiveShadow = true;
+          //child.castShadow = true;
+        }
+      });
+      scene.add(campfire);
+      campfire.position.set(1000, 0, 1100); // Set the position of the campfire
+    });
+
+    // Campfire light
+    var campfireLight = new THREE.PointLight(0xffa500, 1, 100);
+    campfireLight.position.set(1000, 140, 780);
+    scene.add(campfireLight);
+    campfireLight.intensity = 10;
+    campfireLight.distance = 200;
+    campfireLight.decay = 2;
+
+    // Add ground plane
+    var planeGeometry = new THREE.PlaneGeometry(10000, 10000);
+    var planeMaterial = new THREE.MeshLambertMaterial({ color: 0xc5c940, side: THREE.DoubleSide });
+    var ground = new THREE.Mesh(planeGeometry, planeMaterial);
+    ground.rotation.x = Math.PI / 2;
+    ground.position.y = -5;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Add grass
+    const bladeGeometry = new THREE.PlaneGeometry(10, 30);
+    const bladeMaterial = new THREE.MeshLambertMaterial({ color: 0xac8526, side: THREE.DoubleSide});
+
+    //Grass instanced mesh
+    const numBlades = 500;
+    const grass = new THREE.InstancedMesh(bladeGeometry, bladeMaterial, numBlades);
+
+    const planeSize = 10000;  // Define the size of the area to cover with grass
+    const transform = new THREE.Object3D();
+
+    for (let i = 0; i < numBlades; i++) {
+      transform.position.set(Math.random() * planeSize - planeSize / 2, 0.5, Math.random() * planeSize - planeSize / 2);
+      transform.rotation.set(0, Math.random() * Math.PI, 0);
+      transform.updateMatrix();
+      grass.setMatrixAt(i, transform.matrix);
+    }
+    grass.instanceMatrix.needsUpdate = true;
+    scene.add(grass);
+
+
+    // Add lights
+    var ambientlight = new THREE.AmbientLight(new THREE.Color(1, 1, 1), 0.2);
+    scene.add(ambientlight);
+
+    // Sunlight
+    var sunLight = new THREE.DirectionalLight(0xeda987, 1);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 10000;
+    sunLight.shadow.camera.left = -5000;
+    sunLight.shadow.camera.right = 5000;
+    sunLight.shadow.camera.top = 5000;
+    sunLight.shadow.camera.bottom = -5000;
+    sunLight.target.position.set(0, 0, 0);
+    scene.add(sunLight.target);
+    scene.add(sunLight);
+
+    // Light control
+    const lightControl = document.getElementById('lightControl');
+    lightControl.addEventListener('input', function () {
+      const angle = parseFloat(this.value) * Math.PI / 180;
+      sunLight.position.x = 500 * Math.cos(angle);
+      sunLight.position.z = 500 * Math.sin(angle);
+      sunLight.position.y = 1000;
+    });
+
+    // Tree density control
+    const treeDensityControl = document.getElementById('treeDensityControl');
+    treeDensityControl.addEventListener('input', updateTrees);
+
+    function updateTrees() {
+      // Remove existing trees
+      scene.children.forEach(child => {
+        if (child.name === 'tree') scene.remove(child);
+      });
+
+      const treeCount = parseInt(treeDensityControl.value) * 5;
+      let attempts = 0;
+      for (let i = 0; i < treeCount && attempts < treeCount * 10; i++) {
+        let treeModel = treeModels[Math.floor(Math.random() * treeModels.length)].clone();
+        // these numbers are vaugely based off the plane size
+        let x = Math.random() * 8000 - 4000;
+        let z = Math.random() * 9000 - 3000;
+        treeModel.position.set(x, 0, z);
+        treeModel.name = 'tree';
+
+        // check for overlaps with the castle bounding box
+        let treeBox = new THREE.Box3().setFromObject(treeModel);
+        let castleBox = new THREE.Box3().setFromObject(castle);
+        if (!treeBox.intersectsBox(castleBox)) {
+          scene.add(treeModel);
+        } else {
+          i--;
+        }
+        attempts++;
+      }
+    }
+
+    function addSkyGradient() {
+      var vertexShader = `
+        varying vec3 vWorldPosition;
+        void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vWorldPosition = worldPosition.xyz;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `;
+      var fragmentShader = `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+        void main() {
+            float h = normalize(vWorldPosition + offset).y;
+            gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+        }
+    `;
+      var uniforms = {
+        topColor: { value: new THREE.Color(0xeda987) }, // sky
+        bottomColor: { value: new THREE.Color(0xffffff) }, // ground
+        offset: { value: 33 },
+        exponent: { value: 0.6 }
+      };
+      var skyGeo = new THREE.SphereGeometry(4000, 32, 15);
+      var skyMat = new THREE.ShaderMaterial({
+        vertexShader: vertexShader,
+        fragmentShader: fragmentShader,
+        uniforms: uniforms,
+        side: THREE.BackSide
+      });
+      var sky = new THREE.Mesh(skyGeo, skyMat);
+      scene.add(sky);
+    }
+
+  </script>
+</body>
+
+</html>
